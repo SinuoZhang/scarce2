@@ -1,0 +1,5 @@
+fipy
+gmsh
+matplotlib
+numpy
+scipy
