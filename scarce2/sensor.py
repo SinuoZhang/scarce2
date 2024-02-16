@@ -2,10 +2,9 @@ import fipy
 import gmsh
 import numpy as np
 from fipy.solvers import Solver as solver_t  # typing
-from matplotlib import pyplot as plt
 from scipy import constants, interpolate
 
-import solver
+from scarce2 import solver, plotting
 
 EPSILON_SI = 1.04e-10  # Permittivity of silicon [F/m]
 DENSITY_SI = 2.3290  # Density of silicon [g cm^-3]
@@ -13,7 +12,11 @@ DENSITY_SI = 2.3290  # Density of silicon [g cm^-3]
 
 class Sensor(object):
     def __init__(
-        self, n_pixel: int = 7, pitch: int | float = 50, electrode_size: int | float = 30, thickness: int | float = 100
+        self,
+        n_pixel: int = 7,
+        pitch: int | float = 50,
+        electrode_size: int | float = 10,
+        thickness: int | float = 100,
     ):
         """Base class for different sensors
 
@@ -28,8 +31,10 @@ class Sensor(object):
         self.electrode_size = electrode_size
         self.thickness = thickness
 
-        self.n_eff = 1.45e12
+        self.n_eff = 2.7e12
         self.mesh_file = "/tmp/mesh.msh2"
+
+        self.griddata = {}
 
     def generate_mesh(self):
         """Generate mesh to solve equations on.
@@ -80,14 +85,14 @@ class Sensor(object):
         m.geo.addPlaneSurface([line_loop])
 
         m.geo.synchronize()
-        m.mesh.generate(dim=3)
+        m.mesh.generate(dim=2)
         gmsh.write("/tmp/mesh.msh2")  # fipy can only read msh version 2
 
     def setup_e_potential(self):
-        """Define potential and fields"""
+        """Define electric potential"""
         self.mesh = fipy.Gmsh2D(self.mesh_file)
 
-        self.potential = fipy.CellVariable(mesh=self.mesh, name="potential", value=0.0)
+        self.e_potential = fipy.CellVariable(mesh=self.mesh, name="potential", value=0.0)
         electrons = fipy.CellVariable(mesh=self.mesh, name="e-")
         electrons.valence = -1
         self.charge = electrons * electrons.valence
@@ -100,12 +105,12 @@ class Sensor(object):
         electrons.setValue(rho_epsilon)  # Because of scaling, use rho_epsilon
 
     def setup_w_potential(self):
-        """Define weighting potential and field"""
+        """Define weighting potential"""
         self.mesh = fipy.Gmsh2D(self.mesh_file)
 
         self.w_potential = fipy.CellVariable(mesh=self.mesh, name="weighting_potential", value=0.0)
 
-    def solve_e_potential(self, V_bias: int | float=-100, solver: solver_t = solver.LinearLUSolver):
+    def solve_e_potential(self, V_bias: int | float = -100, solver: solver_t = solver.LinearLUSolver):
         """Solve the electric potential equation.
 
         Args:
@@ -114,11 +119,11 @@ class Sensor(object):
         backplane = self.mesh.facesBottom
         readout_plane = self.mesh.facesTop
 
-        # Boundary conditions. Set potential to 0 at readout electrodes (i.e. connected to GND)
-        x, _ = np.array(self.potential.mesh.faceCenters)
+        # Boundary conditions. Set potential to 0 at readout electrodes
+        x, _ = np.array(self.e_potential.mesh.faceCenters)
         for pixel in range(self.n_pixel):
             pixel_pos = self.pitch * (pixel + 0.5) - self.pitch * self.n_pixel / 2
-            self.potential.constrain(
+            self.e_potential.constrain(
                 value=0.0,
                 where=readout_plane
                 & (x > pixel_pos - self.electrode_size / 2)
@@ -126,13 +131,12 @@ class Sensor(object):
             )
 
         # Bias voltage applied on the backside
-        self.potential.constrain(value=V_bias, where=backplane)
+        self.e_potential.constrain(value=V_bias, where=backplane)
 
-        solver = solver
-        self.potential.equation = fipy.DiffusionTerm(coeff=1.0) + self.charge == 0.0
-        self.potential.equation.solve(var=self.potential, solver=solver)
+        self.e_potential.equation = fipy.DiffusionTerm(coeff=1.0) + self.charge == 0.0
+        self.e_potential.equation.solve(var=self.e_potential, solver=solver)
 
-        self.potential.solved = True
+        self.e_potential.solved = True
 
     def solve_w_potential(self, solver: solver_t = solver.LinearLUSolver):
         """Solve the weighting potential equation.
@@ -159,34 +163,63 @@ class Sensor(object):
 
         self.w_potential.solved = True
 
-    def plot_potential(self, pot: fipy.CellVariable, plot_title: str = "Potential", colorbar_label=""):
-        if not pot.solved:
-            raise RuntimeWarning("Potential has not been solved yet!")
-        # Interpolation
-        X = np.linspace(min(pot.mesh.x), max(pot.mesh.x), 250)
-        Y = np.linspace(min(pot.mesh.y), max(pot.mesh.y), 250)
-        xx, yy = np.meshgrid(X, Y)
-        grid = interpolate.griddata(
-            np.transpose(pot.mesh.faceCenters), pot.arithmeticFaceValue, (xx, yy), method="linear"
-        )
+    def convert_to_numpy(self, which: str = "both"):
+        if which == "both":
+            self.convert_to_numpy(which="electric")
+            self.convert_to_numpy(which="weighting")
+        else:
+            if which == "electric":
+                pot = self.e_potential
+            elif which == "weighting":
+                pot = self.w_potential
+            else:
+                raise RuntimeError("Illegal potential specification (supported are 'weighting' and 'electric')")
 
-        aspect = pot.mesh.aspect2D
-        fig_width = 9
-        fig, ax = plt.subplots(figsize=(fig_width, aspect * fig_width))
+            # Interpolation
+            X = np.linspace(min(pot.mesh.x), max(pot.mesh.x), 500)
+            Y = np.linspace(min(pot.mesh.y), max(pot.mesh.y), 500)
+            xx, yy = np.meshgrid(X, Y)
+            potential = interpolate.griddata(
+                np.transpose(pot.mesh.faceCenters),
+                pot.arithmeticFaceValue,
+                (xx, yy),
+                method="linear",
+            )
 
-        ax.set_title(plot_title)
-        im = ax.pcolormesh(xx, yy, grid)
-        cbar = plt.colorbar(im)
-        cbar.set_label("Potential [V]")
-        plt.show()
+            field_x = interpolate.griddata(
+                np.transpose(pot.mesh.faceCenters),
+                pot.grad.arithmeticFaceValue[0],
+                (xx, yy),
+                method="linear",
+            )
+            field_y = interpolate.griddata(
+                np.transpose(pot.mesh.faceCenters),
+                pot.grad.arithmeticFaceValue[1],
+                (xx, yy),
+                method="linear",
+            )
 
+            # If grid has nan values from interpolation, fill with closest finite value
+            for arr in [potential, field_x, field_y]:
+                nan_mask = np.isnan(arr)
+                arr[nan_mask] = np.interp(np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), arr[~nan_mask])
+
+            self.griddata[which] = {'potential': potential, 'field_x': field_x, 'field_y': field_y}
 
 if __name__ == "__main__":
-    s = Sensor()
+    s = Sensor(n_pixel=7, thickness=150)
     s.generate_mesh()
     s.setup_e_potential()
     s.setup_w_potential()
     s.solve_e_potential(V_bias=-100)
     s.solve_w_potential()
-    s.plot_potential(s.potential, plot_title="Potential", colorbar_label="Potential [V]")
-    s.plot_potential(s.w_potential, plot_title="Weighting potential")
+    s.convert_to_numpy()
+    # s.plot_potential(s.potential, plot_title="Electric potential", colorbar_label="Potential [V]")
+    plotting.plot_potential(s.w_potential, n_pixel=s.n_pixel, plot_title="Weighting potential")
+    plotting.plot_field(
+        s.e_potential,
+        n_pixel=s.n_pixel,
+        plot_title="Electric field",
+        colorbar_label="E [V / µm]",
+    )
+
