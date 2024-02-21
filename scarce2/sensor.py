@@ -36,7 +36,7 @@ class Sensor(object):
 
         self.griddata = {}
 
-    def generate_mesh(self):
+    def generate_mesh(self, mesh_density=1):
         """Generate mesh to solve equations on.
 
         The labeling (tags) of the points is as follows:
@@ -71,11 +71,11 @@ class Sensor(object):
         points = []
         for pnt_i, pnt in enumerate(points_xyz):
             if pnt_i in [5, 6]:  # close to central readout electrode
-                mesh_spacing = 1
+                mesh_spacing = 1. / mesh_density
             elif pnt_i in [1, 2]:  # central region on backplane
-                mesh_spacing = 2
+                mesh_spacing = 2. / mesh_density
             else:
-                mesh_spacing = 5  # outer corners
+                mesh_spacing = 5. / mesh_density  # outer corners
             points.append(m.geo.addPoint(*pnt, mesh_spacing, pnt_i + 1))
 
         lines = [m.geo.addLine(points[i], points[i + 1]) for i in range(len(points) - 1)]
