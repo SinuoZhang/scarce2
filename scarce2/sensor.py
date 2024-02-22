@@ -4,7 +4,7 @@ import numpy as np
 from fipy.solvers import Solver as solver_t  # typing
 from scipy import constants, interpolate
 
-from scarce2 import solver, plotting
+from scarce2 import plotting, solver
 
 EPSILON_SI = 1.04e-10  # Permittivity of silicon [F/m]
 DENSITY_SI = 2.3290  # Density of silicon [g cm^-3]
@@ -71,11 +71,11 @@ class Sensor(object):
         points = []
         for pnt_i, pnt in enumerate(points_xyz):
             if pnt_i in [5, 6]:  # close to central readout electrode
-                mesh_spacing = 1. / mesh_density
+                mesh_spacing = 1.0 / mesh_density
             elif pnt_i in [1, 2]:  # central region on backplane
-                mesh_spacing = 2. / mesh_density
+                mesh_spacing = 2.0 / mesh_density
             else:
-                mesh_spacing = 5. / mesh_density  # outer corners
+                mesh_spacing = 5.0 / mesh_density  # outer corners
             points.append(m.geo.addPoint(*pnt, mesh_spacing, pnt_i + 1))
 
         lines = [m.geo.addLine(points[i], points[i + 1]) for i in range(len(points) - 1)]
@@ -204,7 +204,8 @@ class Sensor(object):
                 nan_mask = np.isnan(arr)
                 arr[nan_mask] = np.interp(np.flatnonzero(nan_mask), np.flatnonzero(~nan_mask), arr[~nan_mask])
 
-            self.griddata[which] = {'potential': potential, 'field_x': field_x, 'field_y': field_y}
+            self.griddata[which] = {"potential": potential, "field_x": field_x, "field_y": field_y}
+
 
 if __name__ == "__main__":
     s = Sensor(n_pixel=7, thickness=150)
@@ -222,4 +223,3 @@ if __name__ == "__main__":
         plot_title="Electric field",
         colorbar_label="E [V / µm]",
     )
-
