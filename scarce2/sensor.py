@@ -9,6 +9,8 @@ from scarce2 import plotting, solver
 EPSILON_SI = 1.04e-10  # Permittivity of silicon [F/m]
 DENSITY_SI = 2.3290  # Density of silicon [g cm^-3]
 
+SOLVER = solver.LinearLUSolver
+
 
 class Sensor(object):
     def __init__(
@@ -110,11 +112,11 @@ class Sensor(object):
 
         self.w_potential = fipy.CellVariable(mesh=self.mesh, name="weighting_potential", value=0.0)
 
-    def solve_e_potential(self, V_bias: int | float = -100, solver: solver_t = solver.LinearLUSolver):
+    def solve_e_potential(self, V_bias: int | float = -100):
         """Solve the electric potential equation.
 
         Args:
-            solver (solver_t, optional): fipy solver to use. Defaults to solver.LinearLUSolver.
+            V_bias (int | float, optional): (negative) bias potential at the backside of the sensor
         """
         backplane = self.mesh.facesBottom
         readout_plane = self.mesh.facesTop
@@ -134,16 +136,12 @@ class Sensor(object):
         self.e_potential.constrain(value=V_bias, where=backplane)
 
         self.e_potential.equation = fipy.DiffusionTerm(coeff=1.0) + self.charge == 0.0
-        self.e_potential.equation.solve(var=self.e_potential, solver=solver)
+        self.e_potential.equation.solve(var=self.e_potential, solver=SOLVER)
 
         self.e_potential.solved = True
 
-    def solve_w_potential(self, solver: solver_t = solver.LinearLUSolver):
-        """Solve the weighting potential equation.
-
-        Args:
-            solver (solver_t, optional): fipy solver to use. Defaults to solver.LinearLUSolver.
-        """
+    def solve_w_potential(self):
+        """Solve the weighting potential equation."""
         backplane = self.mesh.facesBottom
         readout_plane = self.mesh.facesTop
 
@@ -159,7 +157,7 @@ class Sensor(object):
         self.w_potential.constrain(value=0.0, where=backplane)
 
         self.w_potential.equation = fipy.DiffusionTerm(coeff=1.0) == 0.0
-        self.w_potential.equation.solve(var=self.w_potential, solver=solver)
+        self.w_potential.equation.solve(var=self.w_potential, solver=SOLVER)
 
         self.w_potential.solved = True
 
