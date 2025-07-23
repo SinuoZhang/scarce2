@@ -88,6 +88,7 @@ class Sensor(object):
 
         m.geo.synchronize()
         m.mesh.generate(dim=2)
+        gmsh.write("/tmp/mesh.obj")
         gmsh.write("/tmp/mesh.msh2")  # fipy can only read msh version 2
 
     def setup_e_potential(self):
