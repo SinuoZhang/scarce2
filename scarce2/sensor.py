@@ -1,5 +1,6 @@
 import fipy
 import gmsh
+import os
 import numpy as np
 from fipy.solvers import Solver as solver_t  # typing
 from scipy import constants, interpolate
@@ -34,11 +35,13 @@ class Sensor(object):
         self.thickness = thickness
 
         self.n_eff = 2.7e12
-        self.mesh_file = "/tmp/mesh.msh2"
-
+        self.mesh_file_path = "/tmp"
+        self.mesh_file_name = f"n{n_pixel}_p{pitch}_e{electrode_size}_d{thickness}_mesh"
+        self.mesh_file_ext = "msh2"
+        self.mesh_file = os.path.join(self.mesh_file_path, f"{self.mesh_file_name}.{self.mesh_file_ext}")
         self.griddata = {}
 
-    def generate_mesh(self, mesh_density=1):
+    def generate_mesh(self, mesh_density=1, file_path=None):
         """Generate mesh to solve equations on.
 
         The labeling (tags) of the points is as follows:
@@ -50,6 +53,9 @@ class Sensor(object):
 
         Points 2, 3, 6, 7 have higher mesh density for higher precision for the central electrode
         """
+        if file_path == None:
+            file_path = self.mesh_file_path
+
         width = self.n_pixel * self.pitch
         outside_roi = (
             width - 3 * self.pitch
@@ -88,8 +94,12 @@ class Sensor(object):
 
         m.geo.synchronize()
         m.mesh.generate(dim=2)
-        gmsh.write("/tmp/mesh.obj")
-        gmsh.write("/tmp/mesh.msh2")  # fipy can only read msh version 2
+        mesh_file_tmp = os.path.join(file_path, f"{self.mesh_file_name}.{self.mesh_file_ext}")
+        mesh_obj = os.path.join(file_path, f"{self.mesh_file_name}.obj")
+        self.mesh_file = mesh_file_tmp
+        print(self.mesh_file)
+        gmsh.write(mesh_obj)
+        gmsh.write(self.mesh_file)  # fipy can only read msh version 2
 
     def setup_e_potential(self):
         """Define electric potential"""
