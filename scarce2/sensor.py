@@ -41,7 +41,7 @@ class Sensor(object):
         self.mesh_file_name = f"{self.structure_name}_mesh"
         self.mesh_file_ext = "msh2"
         self.mesh_file = os.path.join(self.mesh_file_path, f"{self.mesh_file_name}.{self.mesh_file_ext}")
-        
+
         self.griddata = {}
 
     def generate_mesh(self, mesh_density=1, file_path=None):
@@ -175,7 +175,7 @@ class Sensor(object):
 
         self.w_potential.solved = True
 
-    def convert_to_numpy(self, which: str = "both"):
+    def convert_to_numpy(self, points=500, which: str = "both"):
         if which == "both":
             self.convert_to_numpy(which="electric")
             self.convert_to_numpy(which="weighting")
@@ -188,8 +188,8 @@ class Sensor(object):
                 raise RuntimeError("Illegal potential specification (supported are 'weighting' and 'electric')")
 
             # Interpolation
-            X = np.linspace(min(pot.mesh.x), max(pot.mesh.x), 500)
-            Y = np.linspace(min(pot.mesh.y), max(pot.mesh.y), 500)
+            X = np.linspace(min(pot.mesh.x), max(pot.mesh.x), points)
+            Y = np.linspace(min(pot.mesh.y), max(pot.mesh.y), points)
             xx, yy = np.meshgrid(X, Y)
             potential = interpolate.griddata(
                 np.transpose(pot.mesh.faceCenters),
