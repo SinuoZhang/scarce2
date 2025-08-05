@@ -35,10 +35,13 @@ class Sensor(object):
         self.thickness = thickness
 
         self.n_eff = 2.7e12
+
         self.mesh_file_path = "/tmp"
-        self.mesh_file_name = f"n{n_pixel}_p{pitch}_e{electrode_size}_d{thickness}_mesh"
+        self.structure_name =  f"n{n_pixel}_p{pitch}_e{electrode_size}_d{thickness}"
+        self.mesh_file_name = f"{self.structure_name}_mesh"
         self.mesh_file_ext = "msh2"
         self.mesh_file = os.path.join(self.mesh_file_path, f"{self.mesh_file_name}.{self.mesh_file_ext}")
+        
         self.griddata = {}
 
     def generate_mesh(self, mesh_density=1, file_path=None):
